@@ -67,8 +67,9 @@ fn main() {
             .decode()
             .expect("Failed to decode image");
         let cropped_image = match dynamic_image.dimensions() {
-            (1920, 1080) => dynamic_image.clone().crop(264, 88, 580, 855),
-            (1170, 2532) => dynamic_image.clone().crop(250, 406, 860, 1635),
+            (1920, 1080) => dynamic_image.clone().crop(375, 90, 450, 852), // 1080p
+            (1170, 2532) => dynamic_image.clone().crop(250, 406, 860, 1635), // iPhone 12
+            (3840, 2160) => dynamic_image.clone().crop(760, 190, 890, 1693), // 4K
             (x, y) => {
                 println!("Continuing with uncropped image ({}x{})", x, y);
                 dynamic_image
@@ -118,6 +119,8 @@ fn main() {
     let min = make_box_plot(&scores, |x| *x.scores.iter().min().unwrap());
     let mean = make_box_plot(&scores, UmaData::mean_score);
     let max = make_box_plot(&scores, |x| *x.scores.iter().max().unwrap());
+
+    println!("Rendering box plots... do not close the application (or you will have to manually kill geckodriver)");
     let mut exporter = StaticExporterBuilder::default()
         .build()
         .expect("Failed to build StaticExporter");
@@ -355,7 +358,7 @@ fn get_args() -> Args {
         .collect(),
 
         dpi: Some(300),
-        psm: Some(4),
+        psm: Some(6),
         oem: Some(1),
     }
 }
