@@ -69,6 +69,7 @@ fn main() {
         let cropped_image = match dynamic_image.dimensions() {
             (1920, 1080) => dynamic_image.clone().crop(375, 90, 450, 852), // 1080p
             (3840, 2160) => dynamic_image.clone().crop(760, 190, 890, 1693), // 4K
+            (1680, 1050) => dynamic_image.clone().crop(330, 135, 392, 742), // 1680x1050
             (1170, 2532) => dynamic_image.clone().crop(250, 406, 860, 1635), // iPhone 12
             (1080, 2340) => dynamic_image.clone().crop(230, 380, 795, 1503), // Samsung Galaxy s24
             (x, y) => {
@@ -124,7 +125,7 @@ fn main() {
     println!("Rendering box plots... do not close the application (or you will have to manually kill geckodriver)");
     let webdriver_path = PathBuf::from("./geckodriver");
     unsafe {
-        env::set_var("WEBDRIVER_PATH", webdriver_path);         // surely there's a better fucking way to do this ???
+        env::set_var("WEBDRIVER_PATH", webdriver_path);
     }
 
     let mut exporter = StaticExporterBuilder::default()
