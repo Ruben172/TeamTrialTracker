@@ -9,7 +9,7 @@ use rusty_tesseract::Image;
 use rusty_tesseract::image::{GenericImageView, ImageReader};
 use std::collections::HashMap;
 use std::convert::Into;
-use std::fs;
+use std::{env, fs};
 use std::path::{Path, PathBuf};
 
 struct UmaData {
@@ -122,6 +122,11 @@ fn main() {
     let max = make_box_plot(&scores, |x| *x.scores.iter().max().unwrap());
 
     println!("Rendering box plots... do not close the application (or you will have to manually kill geckodriver)");
+    let webdriver_path = PathBuf::from("./geckodriver");
+    unsafe {
+        env::set_var("WEBDRIVER_PATH", webdriver_path);         // surely there's a better fucking way to do this ???
+    }
+
     let mut exporter = StaticExporterBuilder::default()
         .build()
         .expect("Failed to build StaticExporter");
