@@ -103,7 +103,7 @@ fn main() {
         }
     }
 
-    let serialised = serde_json::to_string(&scores).unwrap();
+    let serialised = serde_json::to_string_pretty(&scores).unwrap();
     fs::write("./output/scores.json", serialised).expect("json write failed");
 
     ensure_folder_exists("./input/processed/");
