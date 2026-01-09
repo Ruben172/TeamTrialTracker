@@ -10,7 +10,11 @@ use rusty_tesseract::image::{GenericImageView, ImageReader};
 use std::collections::HashMap;
 use std::convert::Into;
 use std::{env, fs};
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use plotly::common::Anchor::{Left, Top};
+use plotly::layout::Annotation;
+use crate::BoxPlotType::{Max, Mean, Min};
 
 struct UmaData {
     name: String,
@@ -20,6 +24,33 @@ struct UmaData {
 impl UmaData {
     fn mean_score(&self) -> i32 {
         self.scores.iter().sum::<i32>() / self.scores.iter().count() as i32
+    }
+}
+
+enum BoxPlotType {
+    Min,
+    Mean,
+    Max,
+}
+
+impl BoxPlotType {
+    fn to_comparer(&self) -> fn(&UmaData) -> i32 {
+        match self {
+            Min => |x| *x.scores.iter().min().unwrap(),
+            Mean => UmaData::mean_score,
+            Max => |x| *x.scores.iter().max().unwrap(),
+        }
+    }
+}
+
+impl Display for BoxPlotType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Min => "Minimum",
+            Mean => "Mean",
+            Max => "Maximum",
+        };
+        write!(f, "{}", str)
     }
 }
 
@@ -118,9 +149,9 @@ fn main() {
         }
     }
 
-    let min = make_box_plot(&scores, |x| *x.scores.iter().min().unwrap());
-    let mean = make_box_plot(&scores, UmaData::mean_score);
-    let max = make_box_plot(&scores, |x| *x.scores.iter().max().unwrap());
+    let min = make_box_plot(&scores, Min);
+    let mean = make_box_plot(&scores, Mean);
+    let max = make_box_plot(&scores, Max);
 
     println!("Rendering box plots... do not close the application (or you will have to manually kill geckodriver)");
     let webdriver_path = PathBuf::from("./geckodriver");
@@ -138,7 +169,8 @@ fn main() {
     exporter.close()
 }
 
-fn make_box_plot(scores: &HashMap<String, Vec<i32>>, comparer: fn(&UmaData) -> i32) -> Plot {
+fn make_box_plot(scores: &HashMap<String, Vec<i32>>, box_plot_type: BoxPlotType) -> Plot {
+    let comparer = box_plot_type.to_comparer();
     let mut scores = scores
         .iter()
         .map(|(name, scores)| UmaData {
@@ -148,7 +180,24 @@ fn make_box_plot(scores: &HashMap<String, Vec<i32>>, comparer: fn(&UmaData) -> i
         .collect::<Vec<UmaData>>();
     scores.sort_by(|x, y| comparer(x).cmp(&comparer(&y)));
 
-    let layout = Layout::new().show_legend(false).title("Team Trials scores");
+    let shown_score: i32 = scores
+        .iter()
+        .map(|x| comparer(x))
+        .sum();
+    let label = Annotation::new()
+        .text(format!(r#"{} Team Trial score:<br>{}"#, box_plot_type.to_string(), shown_score))
+        .x_ref("paper")
+        .y_ref("paper")
+        .x(0)
+        .y(1.16)
+        .x_anchor(Left)
+        .y_anchor(Top)
+        .show_arrow(false)
+        .background_color("#aaa3");
+    let layout = Layout::new()
+        .title("Team Trials scores")
+        .show_legend(false)
+        .annotations(vec![label]);
 
     let mut plot = Plot::new();
     plot.set_layout(layout);
