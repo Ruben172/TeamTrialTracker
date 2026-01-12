@@ -1,20 +1,19 @@
 #[warn(clippy::pedantic)]
+use crate::BoxPlotType::{Max, Mean, Min};
+use image::{DynamicImage, GenericImageView, ImageReader};
 use plotly::Layout;
+use plotly::common::Anchor::{Left, Top};
 use plotly::common::Line;
+use plotly::layout::Annotation;
 use plotly::{BoxPlot, Plot};
 use plotly_static::{ImageFormat, StaticExporter, StaticExporterBuilder};
 use regex::Regex;
-use rusty_tesseract::Args;
-use rusty_tesseract::Image;
-use rusty_tesseract::image::{GenericImageView, ImageReader};
 use std::collections::HashMap;
-use std::convert::Into;
-use std::{env, fs};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use plotly::common::Anchor::{Left, Top};
-use plotly::layout::Annotation;
-use crate::BoxPlotType::{Max, Mean, Min};
+use std::{env, fs};
+use std::io::{BufWriter, Cursor};
+use tesseract::{OcrEngineMode, PageSegMode, Tesseract};
 
 struct UmaData {
     name: String,
@@ -31,6 +30,13 @@ enum BoxPlotType {
     Min,
     Mean,
     Max,
+}
+
+struct Rectangle {
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
 }
 
 impl BoxPlotType {
@@ -55,7 +61,6 @@ impl Display for BoxPlotType {
 }
 
 fn main() {
-    let args = get_args();
     // capture name, then capture score (comma included), has (?:.* )? in the middle in case MVP gets OCRed as bogus text
     let score_regex = Regex::new(r"^([A-Za-z.']+(?: [A-Za-z.']+)*) (?:.* )?(\d{1,3},\d{1,3})")
         .expect("Failed to compile regex");
@@ -74,7 +79,7 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    let horse_names = fs::read_to_string("./uma.user-words")
+    let horse_names = fs::read_to_string("./tessdata/uma.user-words")
         .unwrap_or("".to_string())
         .lines()
         .map(|x| x.to_string())
@@ -92,24 +97,22 @@ fn main() {
         HashMap::<String, Vec<i32>>::new()
     };
 
+    let mut tesseract = setup_tesseract();
+    println!("Starting OCR...");
     for file_path in &input_paths {
-        let dynamic_image = ImageReader::open(&file_path)
+        let mut image = ImageReader::open(file_path)
             .expect("Failed to open image")
+            .with_guessed_format()
+            .unwrap()
             .decode()
             .expect("Failed to decode image");
-        let cropped_image = match dynamic_image.dimensions() {
-            (1920, 1080) => dynamic_image.clone().crop(375, 90, 450, 852), // 1080p
-            (3840, 2160) => dynamic_image.clone().crop(760, 190, 890, 1693), // 4K
-            (1680, 1050) => dynamic_image.clone().crop(330, 135, 392, 742), // 1680x1050
-            (1170, 2532) => dynamic_image.clone().crop(250, 406, 860, 1635), // iPhone 12
-            (1080, 2340) => dynamic_image.clone().crop(230, 380, 795, 1503), // Samsung Galaxy s24
-            (x, y) => {
-                println!("Continuing with uncropped image ({}x{})", x, y);
-                dynamic_image
-            }
-        };
-        let image = Image::from_dynamic_image(&cropped_image).expect("Failed to convert image");
-        let ocr_result = rusty_tesseract::image_to_string(&image, &args).expect("Tesseract error");
+        let rectangle = get_rectangle(image.dimensions());
+        let crop = image.crop(rectangle.left as u32, rectangle.top as u32, rectangle.width as u32, rectangle.height as u32);
+        tesseract = tesseract
+            .set_image_from_mem(dynamic_image_to_bytes(&crop).as_slice()) // set_rectangle doesn't work well
+            .expect("Failed to set image")
+            .set_source_resolution(300); // this might need configuring for other resolutions later, so far 300 has worked fine for all samples
+        let ocr_result = tesseract.get_text().expect("OCR Failed.");
 
         for line in ocr_result.lines() {
             let Some(captures) = score_regex.captures(line) else {
@@ -136,24 +139,15 @@ fn main() {
 
     let serialised = serde_json::to_string_pretty(&scores).unwrap();
     fs::write("./output/scores.json", serialised).expect("json write failed");
-
-    ensure_folder_exists("./input/processed/");
-    let processed_dir = PathBuf::from("./input/processed/");
-    for file_path in &input_paths {
-        let file_name = file_path
-            .file_name()
-            .expect("Couldn't find file name for image");
-        let dest = processed_dir.join(file_name);
-        if let Err(e) = fs::rename(&file_path, &dest) {
-            eprintln!("Failed to move file {:?} to {:?}: {}", file_path, dest, e);
-        }
-    }
+    move_all_files(&input_paths, "./input/processed");
 
     let min = make_box_plot(&scores, Min);
     let mean = make_box_plot(&scores, Mean);
     let max = make_box_plot(&scores, Max);
 
-    println!("Rendering box plots... do not close the application (or you will have to manually kill geckodriver)");
+    println!(
+        "Rendering box plots... do not close the application (or you will have to manually kill geckodriver)"
+    );
     let webdriver_path = PathBuf::from("./geckodriver");
     unsafe {
         env::set_var("WEBDRIVER_PATH", webdriver_path);
@@ -169,6 +163,27 @@ fn main() {
     exporter.close()
 }
 
+fn dynamic_image_to_bytes(img: &DynamicImage) -> Vec<u8> {
+    let mut buf = Vec::new();
+    img.write_to(BufWriter::new(&mut Cursor::new(&mut buf)), image::ImageFormat::Bmp)
+        .expect("Failed to encode image");
+    buf
+}
+
+fn move_all_files(input_paths: &Vec<PathBuf>, dest_path: &str) {
+    ensure_folder_exists(dest_path);
+    let processed_dir = PathBuf::from(dest_path);
+    for file_path in input_paths {
+        let file_name = file_path
+            .file_name()
+            .expect("Couldn't find file name for image");
+        let dest = processed_dir.join(file_name);
+        if let Err(e) = fs::rename(&file_path, &dest) {
+            eprintln!("Failed to move file {:?} to {:?}: {}", file_path, dest, e);
+        }
+    }
+}
+
 fn make_box_plot(scores: &HashMap<String, Vec<i32>>, box_plot_type: BoxPlotType) -> Plot {
     let comparer = box_plot_type.to_comparer();
     let mut scores = scores
@@ -180,12 +195,13 @@ fn make_box_plot(scores: &HashMap<String, Vec<i32>>, box_plot_type: BoxPlotType)
         .collect::<Vec<UmaData>>();
     scores.sort_by(|x, y| comparer(x).cmp(&comparer(&y)));
 
-    let shown_score: i32 = scores
-        .iter()
-        .map(|x| comparer(x))
-        .sum();
+    let shown_score: i32 = scores.iter().map(|x| comparer(x)).sum();
     let label = Annotation::new()
-        .text(format!(r#"{} Team Trial score:<br>{}"#, box_plot_type.to_string(), shown_score))
+        .text(format!(
+            r#"{} Team Trial score:<br>{}"#,
+            box_plot_type.to_string(),
+            shown_score
+        ))
         .x_ref("paper")
         .y_ref("paper")
         .x(0)
@@ -343,13 +359,16 @@ fn uma_fill_color(name: &String) -> String {
         "Vodka" => "#FEFF64",
         "Winning Ticket" => "#EF1D23",
         _ => "#000000",
-    }.to_string()
+    }
+    .to_string()
 }
 
 // AI
 fn hex_to_rgb(hex: &str) -> Option<(u8, u8, u8)> {
     let h = hex.trim_start_matches('#');
-    if h.len() != 6 { return None; }
+    if h.len() != 6 {
+        return None;
+    }
     let r = u8::from_str_radix(&h[0..2], 16).ok()?;
     let g = u8::from_str_radix(&h[2..4], 16).ok()?;
     let b = u8::from_str_radix(&h[4..6], 16).ok()?;
@@ -395,26 +414,67 @@ fn ensure_folder_exists(path: &str) -> () {
     }
 }
 
-fn get_args() -> Args {
-    Args {
-        lang: "eng".into(),
-        config_variables: [
-            (
-                "tessedit_char_whitelist",
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.,' ",
-            ),
-            ("user_patterns_file", "./uma.user-patterns"),
-            ("user_words_file", "./uma.user-words"),
-            ("load_system_dawg", "0"),
-            ("load_freq_dawg", "0"),
-        ]
-        .iter()
-        .cloned()
-        .map(|(x, y)| (x.into(), y.into()))
-        .collect(),
-
-        dpi: Some(300),
-        psm: Some(6),
-        oem: Some(1),
+fn get_rectangle(dimensions: (u32, u32)) -> Rectangle {
+    match dimensions {
+        (1920, 1080) => Rectangle {
+            left: 375,
+            top: 90,
+            width: 450,
+            height: 852,
+        }, // 1080p
+        (3840, 2160) => Rectangle {
+            left: 760,
+            top: 190,
+            width: 890,
+            height: 1693,
+        }, // 4K
+        (1680, 1050) => Rectangle {
+            left: 330,
+            top: 135,
+            width: 392,
+            height: 742,
+        }, // 1680x1050
+        (1170, 2532) => Rectangle {
+            left: 250,
+            top: 406,
+            width: 860,
+            height: 1635,
+        }, // iPhone 12
+        (1080, 2340) => Rectangle {
+            left: 230,
+            top: 380,
+            width: 795,
+            height: 1503,
+        }, // Samsung Galaxy s24
+        (w, h) => {
+            println!("Continuing with uncropped image ({}x{})", w, h);
+            Rectangle {
+                left: 0,
+                top: 0,
+                width: w as i32,
+                height: h as i32,
+            }
+        }
     }
+}
+
+fn setup_tesseract() -> Tesseract {
+    let mut t = Tesseract::new_with_oem(Some("./tessdata/"), Some("eng"), OcrEngineMode::LstmOnly)
+        .expect("Failed to initialise OCR engine");
+    t.set_page_seg_mode(PageSegMode::PsmSingleBlock);
+    t = t
+        .set_variable(
+            "tessedit_char_whitelist",
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.,' ",
+        )
+        .unwrap()
+        .set_variable("user_patterns_file", "./tessdata/uma.user-patterns")
+        .unwrap()
+        .set_variable("user_words_file", "./tessdata/uma.user-words")
+        .unwrap()
+        .set_variable("load_system_dawg", "0")
+        .unwrap()
+        .set_variable("load_freq_dawg", "0")
+        .unwrap();
+    t
 }
