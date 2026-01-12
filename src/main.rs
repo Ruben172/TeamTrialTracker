@@ -17,12 +17,12 @@ use tesseract::{OcrEngineMode, PageSegMode, Tesseract};
 
 struct UmaData {
     name: String,
-    scores: Vec<i32>,
+    scores: Vec<u32>,
 }
 
 impl UmaData {
-    fn mean_score(&self) -> i32 {
-        self.scores.iter().sum::<i32>() / self.scores.iter().count() as i32
+    fn mean_score(&self) -> u32 {
+        self.scores.iter().sum::<u32>() / self.scores.iter().count() as u32
     }
 }
 
@@ -33,14 +33,14 @@ enum BoxPlotType {
 }
 
 struct Rectangle {
-    left: i32,
-    top: i32,
-    width: i32,
-    height: i32,
+    left: u32,
+    top: u32,
+    width: u32,
+    height: u32,
 }
 
 impl BoxPlotType {
-    fn to_comparer(&self) -> fn(&UmaData) -> i32 {
+    fn to_comparer(&self) -> fn(&UmaData) -> u32 {
         match self {
             Min => |x| *x.scores.iter().min().unwrap(),
             Mean => UmaData::mean_score,
@@ -86,7 +86,7 @@ fn main() {
         .collect::<Vec<String>>();
 
     ensure_folder_exists("./output/");
-    let mut scores: HashMap<String, Vec<i32>> = if fs::exists("./output/scores.json").unwrap() {
+    let mut scores: HashMap<String, Vec<u32>> = if fs::exists("./output/scores.json").unwrap() {
         serde_json::from_str(
             fs::read_to_string("./output/scores.json")
                 .expect("json read failed")
@@ -94,7 +94,7 @@ fn main() {
         )
         .unwrap()
     } else {
-        HashMap::<String, Vec<i32>>::new()
+        HashMap::<String, Vec<u32>>::new()
     };
 
     let mut tesseract = setup_tesseract();
@@ -107,7 +107,7 @@ fn main() {
             .decode()
             .expect("Failed to decode image");
         let rectangle = get_rectangle(image.dimensions());
-        let crop = image.crop(rectangle.left as u32, rectangle.top as u32, rectangle.width as u32, rectangle.height as u32);
+        let crop = image.crop(rectangle.left, rectangle.top, rectangle.width, rectangle.height);
         tesseract = tesseract
             .set_image_from_mem(dynamic_image_to_bytes(&crop).as_slice()) // set_rectangle doesn't work well
             .expect("Failed to set image")
@@ -124,7 +124,7 @@ fn main() {
                 .filter(|x| horse_names.contains(&(x.to_string()))) // discard all words from name matches that do not exist in any uma's name.
                 .collect::<Vec<&str>>()
                 .join(" ");
-            let score = match captures[2].split(",").collect::<String>().parse::<i32>() {
+            let score = match captures[2].split(",").collect::<String>().parse::<u32>() {
                 Ok(s) => s,
                 Err(_) => continue,
             };
@@ -184,7 +184,7 @@ fn move_all_files(input_paths: &Vec<PathBuf>, dest_path: &str) {
     }
 }
 
-fn make_box_plot(scores: &HashMap<String, Vec<i32>>, box_plot_type: BoxPlotType) -> Plot {
+fn make_box_plot(scores: &HashMap<String, Vec<u32>>, box_plot_type: BoxPlotType) -> Plot {
     let comparer = box_plot_type.to_comparer();
     let mut scores = scores
         .iter()
@@ -195,7 +195,7 @@ fn make_box_plot(scores: &HashMap<String, Vec<i32>>, box_plot_type: BoxPlotType)
         .collect::<Vec<UmaData>>();
     scores.sort_by(|x, y| comparer(x).cmp(&comparer(&y)));
 
-    let shown_score: i32 = scores.iter().map(|x| comparer(x)).sum();
+    let shown_score: u32 = scores.iter().map(|x| comparer(x)).sum();
     let label = Annotation::new()
         .text(format!(
             r#"{} Team Trial score:<br>{}"#,
@@ -451,8 +451,8 @@ fn get_rectangle(dimensions: (u32, u32)) -> Rectangle {
             Rectangle {
                 left: 0,
                 top: 0,
-                width: w as i32,
-                height: h as i32,
+                width: w,
+                height: h,
             }
         }
     }
