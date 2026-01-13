@@ -1,24 +1,20 @@
 use crate::uma::uma_fill_color;
-use plotly::{
-    common::{
-        Anchor::{Left, Top},
-        Line,
-    },
-    layout::Annotation,
-    BoxPlot, Layout, Plot,
-};
-use plotly_static::{ImageFormat, StaticExporter, StaticExporterBuilder};
 use std::{
     collections::HashMap,
     env,
     fmt::Display,
     path::{Path, PathBuf},
 };
+use charming::{Chart, ImageRenderer};
+use charming::component::{Axis, Legend, Title};
+use charming::datatype::{DataSource, Dataset};
+use charming::series::Boxplot;
+use image::ImageFormat;
 use BoxPlotType::*;
 
 const GECKO_PATH: &str = "./geckodriver";
 
-pub fn create_plots(umadata: &mut Vec<UmaData>) -> Vec<PlotWrapper> {
+pub fn create_charts(umadata: &mut Vec<UmaData>) -> Vec<ChartWrapper> {
     let min = make_box_plot(umadata, Min);
     let mean = make_box_plot(umadata, Mean);
     let max = make_box_plot(umadata, Max);
@@ -26,78 +22,72 @@ pub fn create_plots(umadata: &mut Vec<UmaData>) -> Vec<PlotWrapper> {
     vec![min, mean, max]
 }
 
-pub fn render_plots(plots: Vec<PlotWrapper>) {
+pub fn render_charts(plots: Vec<ChartWrapper>) {
     println!(
         "Rendering box plots... do not close the application (or you will have to manually kill geckodriver)"
     );
-    let webdriver_path = PathBuf::from(GECKO_PATH);
-    unsafe {
-        env::set_var("WEBDRIVER_PATH", webdriver_path);
-    }
-
-    let mut exporter = StaticExporterBuilder::default()
-        .build()
-        .expect("Failed to build StaticExporter");
 
     for plot in plots {
-        render_plot(plot, &mut exporter);
+        render_chart(&plot);
     }
-
-    exporter.close()
 }
 
-fn make_box_plot(umadata: &mut Vec<UmaData>, box_plot_type: BoxPlotType) -> PlotWrapper {
+fn make_box_plot(umadata: &mut Vec<UmaData>, box_plot_type: BoxPlotType) -> ChartWrapper {
     let comparer = box_plot_type.to_comparer();
     umadata.sort_by_key(&comparer);
 
     let shown_score: u32 = umadata.iter().map(comparer).sum();
-    let label = Annotation::new()
-        .text(format!(
-            r#"{} Team Trial score:<br>{}"#,
-            box_plot_type, shown_score
-        ))
-        .x_ref("paper")
-        .y_ref("paper")
-        .x(0)
-        .y(1.16)
-        .x_anchor(Left)
-        .y_anchor(Top)
-        .show_arrow(false)
-        .background_color("#aaa3");
-    let layout = Layout::new()
-        .title("Team Trials scores")
-        .show_legend(false)
-        .annotations(vec![label]);
 
-    let mut plot = Plot::new();
-    plot.set_layout(layout);
-    for uma in umadata {
-        let name = uma.name.clone();
-        let color = uma_fill_color(&name);
-        let trace = BoxPlot::new(uma.scores.clone())
-            .name(&name)
-            .fill_color(color.clone() + "b3") // 0.7 opacity
-            .line(Line::new().color(darken_hex(&color)).width(1.5));
-        plot.add_trace(trace);
-    }
+    umadata.iter_mut().for_each(|x| x.scores.sort());
+    let data: Vec<Vec<i32>> = umadata.iter().map(|x| x.scores.clone().iter_mut().map(|x| *x as i32).collect::<Vec<i32>>()).collect();
 
-    PlotWrapper {
+    // let ds = Dataset::new().transform();
+    let chart = Chart::new()
+        .title(Title::new().text("Team Trial scores"))
+        .x_axis(Axis::new()/*.data(umadata.iter().map(|x| x.name.clone()).collect())*/)
+        .y_axis(Axis::new().min(15000).max(60000))
+        .series(Boxplot::new().name("boxplot").data(data));
+    // todo!();
+    // let label = Annotation::new()
+    //     .text(format!(
+    //         r#"{} Team Trial score:<br>{}"#,
+    //         box_plot_type, shown_score
+    //     ))
+    //     .x_ref("paper")
+    //     .y_ref("paper")
+    //     .x(0)
+    //     .y(1.16)
+    //     .x_anchor(Left)
+    //     .y_anchor(Top)
+    //     .show_arrow(false)
+    //     .background_color("#aaa3");
+    // let layout = Layout::new()
+    //     .title("Team Trials scores")
+    //     .show_legend(false)
+    //     .annotations(vec![label]);
+    //
+    // let mut plot = Plot::new();
+    // plot.set_layout(layout);
+    // for uma in umadata {
+    //     let name = uma.name.clone();
+    //     let color = uma_fill_color(&name);
+    //     let trace = BoxPlot::new(uma.scores.clone())
+    //         .name(&name)
+    //         .fill_color(color.clone() + "b3") // 0.7 opacity
+    //         .line(Line::new().color(darken_hex(&color)).width(1.5));
+    //     plot.add_trace(trace);
+    // }
+
+    ChartWrapper {
         box_plot_type,
-        plot,
+        chart,
     }
 }
 
-fn render_plot(plot: PlotWrapper, exporter: &mut StaticExporter) {
-    exporter
-        .write_fig(
-            Path::new(format!("./output/{}.png", plot.box_plot_type.to_file_name()).as_str()),
-            &serde_json::from_str(&plot.plot.to_json()).expect("Failed to serialise boxplot"),
-            ImageFormat::PNG,
-            800,
-            600,
-            1.0,
-        )
-        .expect("Failed to export plot");
+fn render_chart(chart: &ChartWrapper) {
+    let mut renderer = ImageRenderer::new(800, 600);
+    renderer.render_format(ImageFormat::Png, &chart.chart).unwrap();
+    renderer.save_format(ImageFormat::Png, &chart.chart, format!("./output/{}.png", chart.box_plot_type.to_file_name())).unwrap()
 }
 
 pub struct UmaData {
@@ -120,9 +110,9 @@ impl UmaData {
     }
 }
 
-pub struct PlotWrapper {
+pub struct ChartWrapper {
     box_plot_type: BoxPlotType,
-    plot: Plot,
+    chart: Chart,
 }
 
 enum BoxPlotType {
@@ -157,37 +147,5 @@ impl Display for BoxPlotType {
             Max => "Maximum",
         };
         write!(f, "{}", str)
-    }
-}
-
-// AI
-fn hex_to_rgb(hex: &str) -> Option<(u8, u8, u8)> {
-    let h = hex.trim_start_matches('#');
-    if h.len() != 6 {
-        return None;
-    }
-    let r = u8::from_str_radix(&h[0..2], 16).ok()?;
-    let g = u8::from_str_radix(&h[2..4], 16).ok()?;
-    let b = u8::from_str_radix(&h[4..6], 16).ok()?;
-    Some((r, g, b))
-}
-
-// AI
-fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
-    format!("#{:02x}{:02x}{:02x}", r, g, b)
-}
-
-// AI
-fn darken_hex(hex: &String) -> String {
-    // factor in (0.0, 1.0) where 1.0 = same colour, 0.8 = 20% darker
-    let factor = 0.7;
-    if let Some((r, g, b)) = hex_to_rgb(hex) {
-        let rf = ((r as f32) * factor).round().clamp(0.0, 255.0) as u8;
-        let gf = ((g as f32) * factor).round().clamp(0.0, 255.0) as u8;
-        let bf = ((b as f32) * factor).round().clamp(0.0, 255.0) as u8;
-        rgb_to_hex(rf, gf, bf)
-    } else {
-        // if input not valid hex, return it unchanged
-        hex.to_string()
     }
 }

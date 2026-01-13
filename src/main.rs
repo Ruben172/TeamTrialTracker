@@ -4,9 +4,10 @@ mod io_helper;
 mod plot;
 mod tess;
 mod uma;
+mod colour;
 
 use io_helper::{read_input_dir, read_scores, save_scores};
-use plot::{create_plots, render_plots, UmaData};
+use plot::{create_charts, render_charts, UmaData};
 use regex::Regex;
 use tess::{ocr_image, parse_orc_data, setup_tesseract};
 use uma::read_uma_names;
@@ -40,6 +41,6 @@ fn main() {
     save_scores(&scores, &input_paths);
 
     let mut umadata = UmaData::from_scores(&scores);
-    let plots = create_plots(&mut umadata);
-    render_plots(plots);
+    let plots = create_charts(&mut umadata);
+    render_charts(plots);
 }
