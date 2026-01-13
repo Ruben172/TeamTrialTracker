@@ -61,9 +61,9 @@ pub fn setup_tesseract() -> Tesseract {
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.,' ",
         )
         .unwrap()
-        .set_variable("user_patterns_file", "./tessdata/uma.user-patterns")
+        .set_variable("user_patterns_file", &format!("{}uma.user-patterns", TESSDATA_DIR))
         .unwrap()
-        .set_variable("user_words_file", "./tessdata/uma.user-words")
+        .set_variable("user_words_file", &format!("{}uma.user-words", TESSDATA_DIR))
         .unwrap()
         .set_variable("load_system_dawg", "0")
         .unwrap()

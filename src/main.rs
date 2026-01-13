@@ -14,8 +14,8 @@ use uma::read_uma_names;
 const INPUT_DIR: &str = "./input/";
 const OUTPUT_DIR: &str = "./output/";
 const OUTPUT_FILE: &str = "./output/scores.json";
-const TESSDATA_DIR: &str = "./tessdata/";
-const UMA_NAME_FILE: &str = "./tessdata/uma.user-words";
+const TESSDATA_DIR: &str = "./.tessdata/";
+const UMA_NAME_FILE: &str = "./.tessdata/uma.user-words";
 
 fn main() {
     // capture name, then capture score (comma included), has (?:.* )? in the middle in case MVP gets OCRed as bogus text
