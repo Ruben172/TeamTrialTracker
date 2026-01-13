@@ -1,47 +1,47 @@
-use crate::uma::uma_fill_color;
+use crate::{OUTPUT_DIR, uma::uma_fill_color};
 use BoxPlotType::*;
-use plotly::{
-    BoxPlot, Layout, Plot,
-    common::{
-        Anchor::{Left, Top},
-        Line,
+use itertools::Itertools;
+use plotters::{
+    chart::{ChartBuilder, SeriesLabelPosition},
+    coord::Shift,
+    data::{Quartiles, fitting_range},
+    prelude::{
+        BitMapBackend, Boxplot, DrawingArea, DrawingBackend, IntoDrawingArea, IntoSegmentedCoord,
+        Rectangle, SVGBackend, SegmentValue,
     },
-    layout::Annotation,
+    style::{BLACK, Color, RGBAColor, RGBColor, ShapeStyle, WHITE},
 };
-use plotly_static::{ImageFormat, StaticExporter, StaticExporterBuilder};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     env,
     fmt::Display,
     path::{Path, PathBuf},
 };
 
-const GECKO_PATH: &str = "./geckodriver";
-
 pub fn create_box_plot(scores: &HashMap<String, Vec<u32>>) {
-    let min = make_box_plot(&scores, Min);
-    let mean = make_box_plot(&scores, Mean);
-    let max = make_box_plot(&scores, Max);
+    let name_min = format!("{OUTPUT_DIR}min.svg");
+    let name_mean = format!("{OUTPUT_DIR}mean.svg");
+    let name_max = format!("{OUTPUT_DIR}max.svg");
+    let mut min = write_box_plot(&name_min).into_drawing_area();
+    let mut mean = write_box_plot(&name_mean).into_drawing_area();
+    let mut max = write_box_plot(&name_max).into_drawing_area();
+    make_box_plot(&scores, Min, &mut min);
+    make_box_plot(&scores, Mean, &mut mean);
+    make_box_plot(&scores, Max, &mut max);
 
     println!(
         "Rendering box plots... do not close the application (or you will have to manually kill geckodriver)"
     );
-    let webdriver_path = PathBuf::from(GECKO_PATH);
-    unsafe {
-        env::set_var("WEBDRIVER_PATH", webdriver_path);
-    }
-
-    let mut exporter = StaticExporterBuilder::default()
-        .build()
-        .expect("Failed to build StaticExporter");
-    write_box_plot("min", min, &mut exporter);
-    write_box_plot("mean", mean, &mut exporter);
-    write_box_plot("max", max, &mut exporter);
-
-    exporter.close()
+    min.present();
+    mean.present();
+    max.present();
 }
 
-fn make_box_plot(scores: &HashMap<String, Vec<u32>>, box_plot_type: BoxPlotType) -> Plot {
+fn make_box_plot<B: DrawingBackend>(
+    scores: &HashMap<String, Vec<u32>>,
+    box_plot_type: BoxPlotType,
+    canvas: &mut DrawingArea<B, Shift>,
+) {
     let comparer = box_plot_type.to_comparer();
     let mut scores = scores
         .iter()
@@ -53,51 +53,69 @@ fn make_box_plot(scores: &HashMap<String, Vec<u32>>, box_plot_type: BoxPlotType)
     scores.sort_by(|x, y| comparer(x).cmp(&comparer(&y)));
 
     let shown_score: u32 = scores.iter().map(|x| comparer(x)).sum();
-    let label = Annotation::new()
-        .text(format!(
-            r#"{} Team Trial score:<br>{}"#,
-            box_plot_type.to_string(),
-            shown_score
-        ))
-        .x_ref("paper")
-        .y_ref("paper")
-        .x(0)
-        .y(1.16)
-        .x_anchor(Left)
-        .y_anchor(Top)
-        .show_arrow(false)
-        .background_color("#aaa3");
-    let layout = Layout::new()
-        .title("Team Trials scores")
-        .show_legend(false)
-        .annotations(vec![label]);
+    let values: Vec<u32> = scores.iter().flat_map(|x| x.scores.clone()).collect();
+    let values_range = fitting_range(values.iter());
 
-    let mut plot = Plot::new();
-    plot.set_layout(layout);
-    for uma in scores {
-        let name = uma.name.clone();
-        let color = uma_fill_color(&name);
-        let trace = BoxPlot::new(uma.scores)
-            .name(&name)
-            .fill_color(color.clone() + "b3") // 0.7 opacity
-            .line(Line::new().color(darken_hex(&color)).width(1.5));
-        plot.add_trace(trace);
+    let umas = scores.iter().map(|u| u.name.clone()).collect::<Vec<_>>();
+
+    let dataset: Vec<(String, Quartiles)> = scores
+        .iter()
+        .map(|UmaData { name, scores }| (name.clone(), Quartiles::new(scores)))
+        .collect();
+
+    canvas.fill(&WHITE).unwrap();
+
+    let mut offsets = (-12..).step_by(24);
+    let mut series = BTreeMap::new();
+    for (name, quart) in dataset.iter() {
+        let color = hex_to_rgb(&uma_fill_color(&name)).unwrap();
+        let color = RGBColor(color.0, color.1, color.2).filled();
+        let entry = series
+            .entry(name.clone())
+            .or_insert_with(|| (Vec::new(), color, offsets.next().unwrap()));
+        entry.0.push((name.clone(), quart));
     }
 
-    plot
+    let canvas = canvas.margin(5, 5, 5, 5);
+
+    let mut chart = ChartBuilder::on(&canvas)
+        .x_label_area_size(40)
+        .y_label_area_size(40)
+        .caption(
+            format!(
+                "{} Team Trial score: {}",
+                box_plot_type.to_string(),
+                shown_score
+            ),
+            ("sans-serif", 20),
+        )
+        .build_cartesian_2d(umas[..].into_segmented(), 0.0..values_range.end as f32)
+        .unwrap();
+
+    chart
+        .configure_mesh()
+        .y_labels(umas.len())
+        .light_line_style(WHITE)
+        .draw()
+        .unwrap();
+
+    for (label, (values, style, offset)) in &series {
+        chart
+            .draw_series(values.iter().map(|x| {
+                Boxplot::new_vertical(SegmentValue::CenterOf(&x.0), x.1)
+                    .width(30)
+                    .whisker_width(1.5)
+                    .style(style.filled())
+                    .offset(*offset)
+            }))
+            .unwrap()
+            .label(label);
+    }
 }
 
-fn write_box_plot(name: &str, plot: Plot, exporter: &mut StaticExporter) -> () {
-    exporter
-        .write_fig(
-            Path::new(format!("./output/{name}.png").as_str()),
-            &serde_json::from_str(&plot.to_json()).expect("Failed to serialise boxplot"),
-            ImageFormat::PNG,
-            800,
-            600,
-            1.0,
-        )
-        .expect("Failed to export plot");
+fn write_box_plot(name: &str) -> SVGBackend {
+    // should base this on the amount of umas
+    SVGBackend::new(name, (1024, 768))
 }
 
 pub struct UmaData {
