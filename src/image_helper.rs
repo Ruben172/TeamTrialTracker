@@ -49,6 +49,12 @@ fn get_rectangle(dimensions: (u32, u32)) -> Rectangle {
             width: 450,
             height: 852,
         }, // 1080p
+        (2560, 1440) => Rectangle {
+            left: 510,
+            top: 125,
+            width: 585,
+            height: 1130,
+        }, // 2K
         (3840, 2160) => Rectangle {
             left: 760,
             top: 190,
