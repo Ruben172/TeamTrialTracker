@@ -9,7 +9,7 @@ pub fn dynamic_image_to_bytes(img: &DynamicImage) -> Vec<u8> {
     let mut buf = Vec::new();
     img.write_to(
         BufWriter::new(&mut Cursor::new(&mut buf)),
-        image::ImageFormat::Bmp,
+        image::ImageFormat::Tiff,
     )
     .expect("Failed to encode image");
     buf

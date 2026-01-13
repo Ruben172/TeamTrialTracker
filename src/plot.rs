@@ -38,7 +38,7 @@ pub fn render_plots(plots: Vec<PlotWrapper>) {
     let mut exporter = StaticExporterBuilder::default()
         .build()
         .expect("Failed to build StaticExporter");
-    
+
     for plot in plots {
         render_plot(plot, &mut exporter);
     }
@@ -139,7 +139,7 @@ impl BoxPlotType {
             Max => |x| *x.scores.iter().max().unwrap(),
         }
     }
-    
+
     fn to_file_name(&self) -> &str {
         match self {
             Min => "min",
