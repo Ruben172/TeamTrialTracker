@@ -21,9 +21,10 @@ const GECKO_PATH: &str = "./geckodriver";
 pub fn create_plots(umadata: &mut Vec<UmaData>) -> Vec<PlotWrapper> {
     let min = make_box_plot(umadata, Min);
     let mean = make_box_plot(umadata, Mean);
+    let med = make_box_plot(umadata, Median);
     let max = make_box_plot(umadata, Max);
 
-    vec![min, mean, max]
+    vec![min, mean, med, max]
 }
 
 pub fn render_plots(plots: Vec<PlotWrapper>) {
@@ -109,6 +110,18 @@ impl UmaData {
     pub fn mean_score(&self) -> u32 {
         self.scores.iter().sum::<u32>() / self.scores.len() as u32
     }
+
+    pub fn median_score(&self) -> u32 {
+        let mut sorted_scores = self.scores.clone();
+        sorted_scores.sort_unstable();
+        let mid = sorted_scores.len() / 2;
+        if sorted_scores.len().is_multiple_of(2) {
+            (sorted_scores[mid - 1] + sorted_scores[mid]) / 2
+        } else {
+            sorted_scores[mid]
+        }
+    }
+
     pub fn from_scores(scores: &HashMap<String, Vec<u32>>) -> Vec<UmaData> {
         scores
             .iter()
@@ -128,6 +141,7 @@ pub struct PlotWrapper {
 enum BoxPlotType {
     Min,
     Mean,
+    Median,
     Max,
 }
 
@@ -136,6 +150,7 @@ impl BoxPlotType {
         match self {
             Min => |x| *x.scores.iter().min().unwrap(),
             Mean => UmaData::mean_score,
+            Median => UmaData::median_score,
             Max => |x| *x.scores.iter().max().unwrap(),
         }
     }
@@ -144,6 +159,7 @@ impl BoxPlotType {
         match self {
             Min => "min",
             Mean => "mean",
+            Median => "median",
             Max => "max",
         }
     }
@@ -154,6 +170,7 @@ impl Display for BoxPlotType {
         let str = match self {
             Min => "Minimum",
             Mean => "Mean",
+            Median => "Median",
             Max => "Maximum",
         };
         write!(f, "{}", str)
