@@ -1,6 +1,6 @@
+use crate::{BACKUP_DIR, INPUT_DIR, OUTPUT_DIR, OUTPUT_FILE};
+use chrono::{DateTime, Datelike, Local, Timelike};
 use std::{collections::HashMap, fs, path::PathBuf};
-
-use crate::{INPUT_DIR, OUTPUT_DIR, OUTPUT_FILE};
 
 pub fn read_input_dir() -> Vec<PathBuf> {
     ensure_folder_exists(INPUT_DIR);
@@ -34,9 +34,35 @@ pub fn read_scores() -> HashMap<String, Vec<u32>> {
 }
 
 pub fn save_scores(scores: &HashMap<String, Vec<u32>>, input_paths: &Vec<PathBuf>) {
+    backup_old_scores();
+
     let serialised = serde_json::to_string_pretty(&scores).unwrap();
     fs::write(OUTPUT_FILE, serialised).expect("output_file write failed");
     move_all_files(input_paths, "./input/processed");
+}
+
+fn backup_old_scores() {
+    if !fs::exists(OUTPUT_FILE).unwrap() {
+        return;
+    }
+
+    ensure_folder_exists(BACKUP_DIR);
+    let dt: DateTime<Local> = fs::metadata(OUTPUT_FILE)
+        .expect("Failed to read output metadata")
+        .modified()
+        .expect("Failed to read output creation time for backup")
+        .into();
+
+    let dest = PathBuf::from(BACKUP_DIR).join(format!(
+        "{:02}-{:02}-{:02} {:02}{:02}{:02}",
+        dt.year(),
+        dt.month(),
+        dt.day(),
+        dt.hour(),
+        dt.minute(),
+        dt.second()
+    ));
+    fs::rename(OUTPUT_FILE, dest).expect("Failed to move scores to backup destination")
 }
 
 fn move_all_files(input_paths: &Vec<PathBuf>, dest_path: &str) {

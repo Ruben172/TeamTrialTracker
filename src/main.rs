@@ -14,6 +14,7 @@ use uma::read_uma_names;
 const INPUT_DIR: &str = "./input/";
 const OUTPUT_DIR: &str = "./output/";
 const OUTPUT_FILE: &str = "./output/scores.json";
+const BACKUP_DIR: &str = "./output/backup/";
 const TESSDATA_DIR: &str = "./.tessdata/";
 const UMA_NAME_FILE: &str = "./.tessdata/uma.user-words";
 
