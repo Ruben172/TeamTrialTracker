@@ -2,21 +2,21 @@
 mod image_helper;
 mod io_helper;
 mod plot;
-mod tess;
+mod ocrs;
 mod uma;
 
 use io_helper::{read_input_dir, read_scores, save_scores};
 use plot::{create_plots, render_plots, UmaData};
 use regex::Regex;
-use tess::{ocr_image, parse_orc_data, setup_tesseract};
+use ocrs::{ocr_image, parse_orc_data, setup_engine};
 use uma::read_uma_names;
 
 const INPUT_DIR: &str = "./input/";
 const OUTPUT_DIR: &str = "./output/";
 const OUTPUT_FILE: &str = "./output/scores.json";
 const BACKUP_DIR: &str = "./output/backup/";
-const TESSDATA_DIR: &str = "./.tessdata/";
-const UMA_NAME_FILE: &str = "./.tessdata/uma.user-words";
+const OCR_DATA_DIR: &str = "./.ocr_data/";
+const UMA_NAME_FILE: &str = "./.tessdata/uma_words";
 
 fn main() {
     // capture name, then capture score (comma included), has (?:.* )? in the middle in case MVP gets OCRed as bogus text
@@ -30,11 +30,10 @@ fn main() {
     let mut scores = read_scores();
 
     println!("Starting OCR...");
-    let mut tesseract = setup_tesseract();
+    let engine = setup_engine();
     for file_path in &input_paths {
         // images
-        let ocr_result: String;
-        (ocr_result, tesseract) = ocr_image(file_path, tesseract);
+        let ocr_result = ocr_image(file_path, &engine);
         parse_orc_data(ocr_result, &horse_names, &score_regex, &mut scores);
     }
 
