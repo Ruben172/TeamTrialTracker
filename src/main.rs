@@ -1,12 +1,12 @@
 #[warn(clippy::pedantic)]
 mod image_helper;
 mod io_helper;
-mod ocrs;
+mod ocr;
 mod plot;
 mod uma;
 
 use io_helper::{read_input_dir, read_scores, save_scores};
-use ocrs::{ocr_image, parse_orc_data, setup_engine};
+use ocr::{ocr_image, parse_orc_data, setup_engine};
 use plot::{UmaData, create_plots, render_plots};
 use std::collections::HashMap;
 use uma::read_uma_colours;
