@@ -11,9 +11,9 @@ dependencies = [
  "ocrs",
  "plotly",
  "plotly_static",
- "regex",
  "rten",
  "serde_json",
+ "strsim",
 ]
 
 [[package]]

@@ -1,11 +1,11 @@
-use crate::uma::uma_fill_color;
+use BoxPlotType::*;
 use plotly::{
+    BoxPlot, Layout, Plot,
     common::{
         Anchor::{Left, Top},
         Line,
     },
     layout::Annotation,
-    BoxPlot, Layout, Plot,
 };
 use plotly_static::{ImageFormat, StaticExporter, StaticExporterBuilder};
 use std::{
@@ -14,15 +14,17 @@ use std::{
     fmt::Display,
     path::{Path, PathBuf},
 };
-use BoxPlotType::*;
 
 const GECKO_PATH: &str = "./geckodriver";
 
-pub fn create_plots(umadata: &mut Vec<UmaData>) -> Vec<PlotWrapper> {
-    let min = make_box_plot(umadata, Min);
-    let mean = make_box_plot(umadata, Mean);
-    let med = make_box_plot(umadata, Median);
-    let max = make_box_plot(umadata, Max);
+pub fn create_plots(
+    umadata: &mut Vec<UmaData>,
+    uma_colours: &HashMap<String, String>,
+) -> Vec<PlotWrapper> {
+    let min = make_box_plot(umadata, uma_colours, Min);
+    let mean = make_box_plot(umadata, uma_colours, Mean);
+    let med = make_box_plot(umadata, uma_colours, Median);
+    let max = make_box_plot(umadata, uma_colours, Max);
 
     vec![min, mean, med, max]
 }
@@ -47,7 +49,11 @@ pub fn render_plots(plots: Vec<PlotWrapper>) {
     exporter.close()
 }
 
-fn make_box_plot(umadata: &mut Vec<UmaData>, box_plot_type: BoxPlotType) -> PlotWrapper {
+fn make_box_plot(
+    umadata: &mut Vec<UmaData>,
+    uma_colours: &HashMap<String, String>,
+    box_plot_type: BoxPlotType,
+) -> PlotWrapper {
     let comparer = box_plot_type.to_comparer();
     umadata.sort_by_key(&comparer);
 
@@ -74,7 +80,10 @@ fn make_box_plot(umadata: &mut Vec<UmaData>, box_plot_type: BoxPlotType) -> Plot
     plot.set_layout(layout);
     for uma in umadata {
         let name = uma.name.clone();
-        let color = uma_fill_color(&name);
+        let color = uma_colours
+            .get(&name)
+            .unwrap_or(&"#000".to_string())
+            .clone();
         let trace = BoxPlot::new(uma.scores.clone())
             .name(&name)
             .fill_color(color.clone() + "b3") // 0.7 opacity

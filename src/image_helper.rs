@@ -1,19 +1,8 @@
 use std::{
-    io::{BufWriter, Cursor},
     path::Path,
 };
 
 use image::{DynamicImage, GenericImageView, ImageReader};
-
-pub fn dynamic_image_to_bytes(img: &DynamicImage) -> Vec<u8> {
-    let mut buf = Vec::new();
-    img.write_to(
-        BufWriter::new(&mut Cursor::new(&mut buf)),
-        image::ImageFormat::Tiff,
-    )
-    .expect("Failed to encode image");
-    buf
-}
 
 pub fn decode_image(path: &Path) -> DynamicImage {
     ImageReader::open(path)
@@ -25,7 +14,7 @@ pub fn decode_image(path: &Path) -> DynamicImage {
 }
 
 pub fn crop_image(mut img: DynamicImage) -> DynamicImage {
-    let rectangle = get_rectangle(img.dimensions());
+    let rectangle = get_crop_area(img.dimensions());
     img.crop(
         rectangle.left,
         rectangle.top,
@@ -41,7 +30,7 @@ struct Rectangle {
     height: u32,
 }
 
-fn get_rectangle(dimensions: (u32, u32)) -> Rectangle {
+fn get_crop_area(dimensions: (u32, u32)) -> Rectangle {
     match dimensions {
         (1920, 1080) => Rectangle {
             left: 375,
