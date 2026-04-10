@@ -2,7 +2,7 @@ use crate::{
     DATA_DIR,
     image_helper::{crop_image, decode_image},
 };
-use image::GenericImageView;
+use image::EncodableLayout;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use rten::Model;
 use std::path::PathBuf;
@@ -16,7 +16,8 @@ const MIN_OCR_LENGTH: usize = 3;
 pub fn ocr_image(path: &Path, engine: &OcrEngine) -> Vec<String> {
     let image = decode_image(path);
     let crop = crop_image(image);
-    let image_source = ImageSource::from_bytes(crop.as_bytes(), crop.dimensions())
+    let converted = crop.into_rgb8();
+    let image_source = ImageSource::from_bytes(converted.as_bytes(), converted.dimensions())
         .expect("Failed to create image source");
     let ocr_input = engine
         .prepare_input(image_source)
@@ -37,6 +38,10 @@ pub fn ocr_image(path: &Path, engine: &OcrEngine) -> Vec<String> {
         .collect()
 }
 
+fn display_path(path: &Path) -> &str {
+    path.to_str().expect("Failed to convert path to string")
+}
+
 struct OcrParseResult {
     ocr_name: String,
     corrected_name: String,
@@ -55,7 +60,7 @@ struct OcrParseResult {
 pub fn parse_orc_data(
     ocr_result: Vec<String>,
     uma_names: &HashSet<String>,
-    file_path: &PathBuf,
+    file_path: &Path,
 ) -> HashMap<String, u32> {
     let mut names: Vec<OcrParseResult> = Vec::new();
     let mut scores: Vec<u32> = Vec::new();
@@ -66,20 +71,40 @@ pub fn parse_orc_data(
         let mut numbers = String::new();
 
         let mut seen_digits = 0;
+        let mut seen_comma = false;
+        let mut digits_after_comma = 0;
         for char in line.chars() {
-            // Ignore commas
+            // Sometimes, OCR will randomly ignore the last "1" in a score, keep track of when this happens.
             if char == ',' {
+                seen_comma = true;
                 continue;
             }
             // Use digits to differentiate between names (or other text) and scores
             match char.is_ascii_digit() {
                 true => {
                     seen_digits += 1;
+                    if seen_comma {
+                        digits_after_comma += 1;
+                    }
                     numbers.push(char);
                 }
                 false => {
                     // If we've seen at least four digits and approach a non-digit, we reached the end of a score.
                     if seen_digits > 3 {
+                        // OCR will randomly miss a "1" at the end of a score sometimes, add it back when that happens
+                        if seen_comma && digits_after_comma < 3 {
+                            let mut fixed_numbers = numbers.clone();
+                            for _ in 0..(3 - digits_after_comma) {
+                                fixed_numbers.push('1');
+                            }
+                            println!(
+                                "{}\nCorrected misread score: {} -> {}.",
+                                display_path(file_path),
+                                numbers,
+                                fixed_numbers
+                            );
+                            numbers = fixed_numbers;
+                        }
                         break;
                     }
                     text.push(char);
@@ -125,13 +150,10 @@ pub fn parse_orc_data(
     let mut res = HashMap::new();
     for (i, result) in closest_names.iter().enumerate() {
         if result.ocr_name != result.corrected_name {
-            let path_str = file_path
-                .to_str()
-                .expect("Failed to convert path to string");
             println!(
-                "{}\nCorrected incorrectly read name: {} -> {}. Distance: {}",
-                path_str, result.ocr_name, result.corrected_name, result.distance
-            )
+                "{}\nCorrected misread name: {} -> {}. Distance: {}",
+                display_path(file_path), result.ocr_name, result.corrected_name, result.distance
+            );
         }
 
         res.insert(result.corrected_name.clone(), scores[i]);
