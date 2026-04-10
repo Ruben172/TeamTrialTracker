@@ -72,7 +72,7 @@ pub fn parse_orc_data(
                 continue;
             }
             // Use digits to differentiate between names (or other text) and scores
-            match char.is_digit(10) {
+            match char.is_ascii_digit() {
                 true => {
                     seen_digits += 1;
                     numbers.push(char);
@@ -87,8 +87,8 @@ pub fn parse_orc_data(
             }
         }
 
-        // Remove any "MVP" strings that might be attached to names.
-        text = text.split("MVP").collect();
+        // Remove any "MVP" strings that might be attached to names. Trim leading/trailing whitespace.
+        text = text.split("MVP").collect::<String>().trim().to_string();
         // For every text entry, add the closest uma name to the list of names.
         if text.len() > 3 {
             let mut closest_name = "Mambo";
