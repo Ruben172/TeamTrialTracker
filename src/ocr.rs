@@ -59,8 +59,8 @@ struct OcrParseResult {
 /// "Mayano Top Gun"
 /// "47,131 pts i"
 ///
-/// This may be interrupted by an MVP text, or the OCR engine will first read all names before
-/// reading scores. Epithets will also often show up.
+/// This may be interrupted by an MVP text, and names and scores aren't consistently above/below each other.
+/// Epithets will also often show up.
 ///
 /// Unsure if the scores can also be in a single line, but this parsing function does account for it.
 pub fn parse_orc_data(
@@ -80,7 +80,7 @@ pub fn parse_orc_data(
         let mut seen_comma = false;
         let mut digits_after_comma = 0;
         for char in line.chars() {
-            // Sometimes, OCR will randomly ignore the last "1" in a score, keep track of when this happens.
+            // Sometimes, OCR will randomly ignore the last "1" in a score, keep track of when this happens. Otherwise, ignore it for parsing.
             if char == ',' {
                 seen_comma = true;
                 continue;
