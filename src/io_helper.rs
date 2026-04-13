@@ -1,5 +1,8 @@
 use crate::{BACKUP_DIR, INPUT_DIR, OUTPUT_DIR, OUTPUT_FILE};
 use chrono::{DateTime, Datelike, Local, Timelike};
+use serde::Serialize;
+use serde_json::Serializer;
+use serde_json_pretty::Formatter;
 use std::{collections::HashMap, fs, path::PathBuf};
 
 pub fn read_input_dir() -> Vec<PathBuf> {
@@ -36,8 +39,12 @@ pub fn read_scores() -> HashMap<String, Vec<u32>> {
 pub fn save_scores(scores: &HashMap<String, Vec<u32>>, input_paths: &Vec<PathBuf>) {
     backup_old_scores();
 
-    let serialised = serde_json::to_string_pretty(&scores).unwrap();
-    fs::write(OUTPUT_FILE, serialised).expect("output_file write failed");
+    let mut buf = vec![];
+    let formatter = Formatter::new();
+    let mut serialised = Serializer::with_formatter(&mut buf, formatter);
+    scores.serialize(&mut serialised).unwrap();
+
+    fs::write(OUTPUT_FILE, buf).expect("output_file write failed");
     move_all_files(input_paths, "./input/processed");
 }
 
