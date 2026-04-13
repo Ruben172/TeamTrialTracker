@@ -157,7 +157,7 @@ pub fn parse_orc_data(
     for (i, result) in closest_names.iter().enumerate() {
         if result.ocr_name != result.corrected_name {
             println!(
-                "{}\nCorrected misread name: {} -> {}. Distance: {}",
+                "{}\nCorrected misread name: {} -> {} | Distance: {}",
                 display_path(file_path), result.ocr_name, result.corrected_name, result.distance
             );
         }
