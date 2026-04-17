@@ -14,3 +14,35 @@ ocrs = "0.12.2"
 strsim = "0.11.1"
 serde_json_pretty = "0.1.0"
 serde = "1.0.228"
+
+# https://github.com/robertknight/ocrs/issues/117
+[profile.dev.package.rten]
+opt-level = 3
+
+[profile.dev.package.rten-base]
+opt-level = 3
+
+[profile.dev.package.rten-gemm]
+opt-level = 3
+
+[profile.dev.package.rten-simd]
+opt-level = 3
+
+[profile.dev.package.rten-tensor]
+opt-level = 3
+
+[profile.dev.package.rten-model-file]
+opt-level = 3
+
+[profile.dev.package.rten-onnx]
+opt-level = 3
+
+[profile.dev.package.rten-shape-inference]
+opt-level = 3
+
+[profile.dev.package.rten-vecmath]
+opt-level = 3
+
+[profile.dev.package.rten-imageproc]
+opt-level = 3
+
