@@ -36,7 +36,7 @@ pub fn read_scores() -> HashMap<String, Vec<u32>> {
     }
 }
 
-pub fn save_scores(scores: &HashMap<String, Vec<u32>>, input_paths: &Vec<PathBuf>) {
+pub fn save_scores(scores: &HashMap<String, Vec<u32>>) {
     backup_old_scores();
 
     let mut buf = vec![];
@@ -44,8 +44,7 @@ pub fn save_scores(scores: &HashMap<String, Vec<u32>>, input_paths: &Vec<PathBuf
     let mut serialised = Serializer::with_formatter(&mut buf, formatter);
     scores.serialize(&mut serialised).unwrap();
 
-    fs::write(OUTPUT_FILE, buf).expect("output_file write failed");
-    move_all_files(input_paths, "./input/processed");
+    fs::write(OUTPUT_FILE, buf).expect("output_file write failed")
 }
 
 fn backup_old_scores() {
@@ -61,7 +60,7 @@ fn backup_old_scores() {
         .into();
 
     let dest = PathBuf::from(BACKUP_DIR).join(format!(
-        "{:02}-{:02}-{:02} {:02}{:02}{:02}",
+        "{:02}-{:02}-{:02} {:02}{:02}{:02}.json",
         dt.year(),
         dt.month(),
         dt.day(),
@@ -72,7 +71,7 @@ fn backup_old_scores() {
     fs::rename(OUTPUT_FILE, dest).expect("Failed to move scores to backup destination")
 }
 
-fn move_all_files(input_paths: &Vec<PathBuf>, dest_path: &str) {
+pub fn move_all_files(input_paths: &Vec<PathBuf>, dest_path: &str) {
     ensure_folder_exists(dest_path);
     let dest_dir = PathBuf::from(dest_path);
     for file_path in input_paths {

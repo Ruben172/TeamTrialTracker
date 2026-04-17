@@ -5,6 +5,7 @@ mod ocr;
 mod plot;
 mod uma;
 
+use crate::io_helper::move_all_files;
 use io_helper::{read_input_dir, read_scores, save_scores};
 use ocr::{ocr_image, parse_orc_data, setup_engine};
 use plot::{UmaData, create_plots, render_plots};
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 use uma::read_uma_colours;
 
 const INPUT_DIR: &str = "./input/";
+const PROCESSED_DIR: &str = "./input/processed";
 const OUTPUT_DIR: &str = "./output/";
 const OUTPUT_FILE: &str = "./output/scores.json";
 const BACKUP_DIR: &str = "./output/backup/";
@@ -46,9 +48,13 @@ fn main() {
         }
         acc
     });
-    save_scores(&combined_scores, &input_paths);
+    save_scores(&combined_scores);
+    move_all_files(&input_paths, PROCESSED_DIR);
 
     let mut umadata = UmaData::from_scores(&combined_scores);
     let plots = create_plots(&mut umadata, &uma_colours);
+    println!(
+        "Rendering box plots... do not close the application (or you will have to manually kill geckodriver)"
+    );
     render_plots(plots);
 }

@@ -30,9 +30,6 @@ pub fn create_plots(
 }
 
 pub fn render_plots(plots: Vec<PlotWrapper>) {
-    println!(
-        "Rendering box plots... do not close the application (or you will have to manually kill geckodriver)"
-    );
     let webdriver_path = PathBuf::from(GECKO_PATH);
     unsafe {
         env::set_var("WEBDRIVER_PATH", webdriver_path);
