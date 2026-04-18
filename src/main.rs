@@ -33,7 +33,6 @@ fn main() {
     println!("Starting OCR...");
     let engine = setup_engine();
     for file_path in &input_paths {
-        // images
         let ocr_result = ocr_image(file_path, &engine);
         let new_score = parse_orc_data(ocr_result, &uma_names, file_path);
         new_scores.push(new_score);
