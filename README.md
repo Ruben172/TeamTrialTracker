@@ -31,6 +31,8 @@ Currently, specific cropping regions are set to make scanning the screenshots mo
 ## Removing scores
 To remove scores, please open `output/scores.json` in a text editor and remove the scores manually. Make sure the JSON remains properly formatted (there should be no trailing comma after the last score, and all brackets need to be closed properly)
 
+To remove all scores, delete `output/scores.json` completely.
+
 # Troubleshooting
 If something is not working, running the program from a terminal should show you an error. Most common causes of errors are either Firefox not being installed, or the Geckodriver being incorrectly closed. Check if `geckodriver` is running on your system, and kill it manually if it is.
 
