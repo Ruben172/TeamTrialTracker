@@ -1,6 +1,6 @@
 use crate::{
     DATA_DIR,
-    image_helper::{crop_image, decode_image},
+    image_helper::{auto_crop_image, decode_image},
 };
 use image::EncodableLayout;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
@@ -16,11 +16,11 @@ const MIN_OCR_LENGTH: usize = 3;
 pub fn ocr_image(path: &Path, engine: &OcrEngine) -> Vec<String> {
     // Prepare image
     let image = decode_image(path);
-    let crop = crop_image(image);
+    let crop = auto_crop_image(image);
     let converted = crop.into_rgb8();
     let image_source = ImageSource::from_bytes(converted.as_bytes(), converted.dimensions())
         .expect("Failed to create image source");
-    
+
     // Get rectangles
     let ocr_input = engine
         .prepare_input(image_source)
@@ -31,7 +31,7 @@ pub fn ocr_image(path: &Path, engine: &OcrEngine) -> Vec<String> {
     let mut line_rects = engine.find_text_lines(&ocr_input, &word_rects);
     // In 2 out of 917 samples, the ocr results became out of order for seemingly no reason, we sort them by height.
     line_rects.sort_by(|line1, line2| line1[0].center().y.total_cmp(&line2[0].center().y));
-    
+
     // Read and filter results
     let line_texts = engine
         .recognize_text(&ocr_input, &line_rects)
@@ -158,7 +158,10 @@ pub fn parse_orc_data(
         if result.ocr_name != result.corrected_name {
             println!(
                 "{}\nCorrected misread name: {} -> {} | Distance: {}",
-                display_path(file_path), result.ocr_name, result.corrected_name, result.distance
+                display_path(file_path),
+                result.ocr_name,
+                result.corrected_name,
+                result.distance
             );
         }
 
