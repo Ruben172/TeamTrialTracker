@@ -5,8 +5,6 @@ edition = "2024"
 
 [dependencies]
 serde_json = "1.0.149"
-plotly = { version = "0.14" }
-plotly_static = { version = "0.1.0", features = ["geckodriver", "webdriver_download"] }
 image = "0.25.9"
 chrono = "0.4.44"
 rten = "0.24.0"

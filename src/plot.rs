@@ -1,110 +1,93 @@
 use BoxPlotType::*;
-use plotly::{
-    BoxPlot, Layout, Plot,
-    common::{
-        Anchor::{Left, Top},
-        Line,
-    },
-    layout::Annotation,
-};
-use plotly_static::{ImageFormat, StaticExporter, StaticExporterBuilder};
-use std::{
-    collections::HashMap,
-    env,
-    fmt::Display,
-    path::{Path, PathBuf},
-};
+use image::{Rgb, RgbImage};
+use std::{collections::HashMap, fmt::Display};
+use image::imageops::overlay;
 
-const GECKO_PATH: &str = "./geckodriver";
+const IMAGE_BORDER_WIDTH: u32 = 80;
+const BOX_WIDTH: u32 = 42;
+const IMAGE_HEIGHT: u32 = 600;
+const PLOTS_AREA_HEIGHT: u32 = 400;
 
-pub fn create_plots(
-    umadata: &mut Vec<UmaData>,
-    uma_colours: &HashMap<String, String>,
-) -> Vec<PlotWrapper> {
-    let min = make_box_plot(umadata, uma_colours, Min);
-    let mean = make_box_plot(umadata, uma_colours, Mean);
-    let med = make_box_plot(umadata, uma_colours, Median);
-    let max = make_box_plot(umadata, uma_colours, Max);
-
-    vec![min, mean, med, max]
+struct UmaBoxPlot {
+    label: String,
+    min: u32,
+    median: u32,
+    mean: u32,
+    max: u32,
+    q1: u32,
+    q3: u32,
+    lower_whisker: u32,
+    upper_whisker: u32,
+    outliers: Vec<u32>,
 }
 
-pub fn render_plots(plots: Vec<PlotWrapper>) {
-    let webdriver_path = PathBuf::from(GECKO_PATH);
-    unsafe {
-        env::set_var("WEBDRIVER_PATH", webdriver_path);
-    }
+/// Data must be sorted and fraction must be between 0-1
+fn get_percentile(data: &Vec<u32>, fraction: f64) -> u32 {
+    let count = (data.len() - 1) as f64;
+    let point = count * fraction;
+    let lower_idx = point.floor() as usize;
+    let upper_idx = point.ceil() as usize;
 
-    let mut exporter = StaticExporterBuilder::default()
-        .build()
-        .expect("Failed to build StaticExporter");
+    let lower_val = data[lower_idx] as f64;
+    let upper_val = data[upper_idx] as f64;
+    let fract = point.fract();
 
-    for plot in plots {
-        render_plot(plot, &mut exporter);
-    }
-
-    exporter.close()
+    (lower_val * (1.0 - fract) + upper_val * fract) as u32
 }
 
-fn make_box_plot(
-    umadata: &mut Vec<UmaData>,
-    uma_colours: &HashMap<String, String>,
-    box_plot_type: BoxPlotType,
-) -> PlotWrapper {
-    let comparer = box_plot_type.to_comparer();
-    umadata.sort_by_key(&comparer);
+impl From<&UmaData> for UmaBoxPlot {
+    fn from(uma_data: &UmaData) -> Self {
+        let mut sorted_scores = uma_data.scores.clone();
+        sorted_scores.sort_unstable();
+        let mean = sorted_scores.iter().sum::<u32>() / sorted_scores.len() as u32;
 
-    let shown_score: u32 = umadata.iter().map(comparer).sum();
-    let label = Annotation::new()
-        .text(format!(
-            r#"{} Team Trial score:<br>{}"#,
-            box_plot_type, shown_score
-        ))
-        .x_ref("paper")
-        .y_ref("paper")
-        .x(0)
-        .y(1.16)
-        .x_anchor(Left)
-        .y_anchor(Top)
-        .show_arrow(false)
-        .background_color("#aaa3");
-    let layout = Layout::new()
-        .title("Team Trials scores")
-        .show_legend(false)
-        .annotations(vec![label]);
+        let min_score = *sorted_scores.first().unwrap();
+        let max_score = *sorted_scores.last().unwrap();
 
-    let mut plot = Plot::new();
-    plot.set_layout(layout);
-    for uma in umadata {
-        let name = uma.name.clone();
-        let color = uma_colours
-            .get(&name)
-            .unwrap_or(&"#000".to_string())
-            .clone();
-        let trace = BoxPlot::new(uma.scores.clone())
-            .name(&name)
-            .fill_color(color.clone() + "b3") // 0.7 opacity
-            .line(Line::new().color(darken_hex(&color)).width(1.5));
-        plot.add_trace(trace);
-    }
+        let q1 = get_percentile(&sorted_scores, 0.25) as f64;
+        let median = get_percentile(&sorted_scores, 0.5);
+        let q3 = get_percentile(&sorted_scores, 0.75) as f64;
 
-    PlotWrapper {
-        box_plot_type,
-        plot,
+        let iqr = q3 - q1;
+        let lower_whisker = ((q1 - 1.5 * iqr) as u32).max(min_score);
+        let upper_whisker = ((q3 + 1.5 * iqr) as u32).min(max_score);
+
+        let outliers: Vec<u32> = sorted_scores
+            .into_iter()
+            .filter(|s| s < &lower_whisker || s > &upper_whisker)
+            .collect();
+
+        UmaBoxPlot {
+            label: uma_data.name.clone(),
+            min: min_score,
+            median,
+            mean,
+            max: max_score,
+            q1: q1 as u32,
+            q3: q3 as u32,
+            lower_whisker,
+            upper_whisker,
+            outliers,
+        }
     }
 }
 
-fn render_plot(plot: PlotWrapper, exporter: &mut StaticExporter) {
-    exporter
-        .write_fig(
-            Path::new(format!("./output/{}.png", plot.box_plot_type.to_file_name()).as_str()),
-            &serde_json::from_str(&plot.plot.to_json()).expect("Failed to serialise boxplot"),
-            ImageFormat::PNG,
-            800,
-            600,
-            1.0,
-        )
-        .expect("Failed to export plot");
+pub fn render_plots(umadata: Vec<UmaData>, uma_colours: &HashMap<String, String>) {
+    let boxplot_data: Vec<UmaBoxPlot> = umadata
+        .iter()
+        .filter(|u| u.scores.len() > 0)
+        .map(|u| UmaBoxPlot::from(u))
+        .collect();
+
+    let mut base_image = make_base_image(boxplot_data.len());
+
+    todo!()
+}
+
+fn make_base_image(character_slots: usize) -> RgbImage {
+    let width = 2 * IMAGE_BORDER_WIDTH + BOX_WIDTH * (character_slots as u32);
+
+    RgbImage::from_pixel(width, IMAGE_HEIGHT, Rgb([255, 255, 255]))
 }
 
 pub struct UmaData {
@@ -137,11 +120,6 @@ impl UmaData {
             })
             .collect::<Vec<UmaData>>()
     }
-}
-
-pub struct PlotWrapper {
-    box_plot_type: BoxPlotType,
-    plot: Plot,
 }
 
 enum BoxPlotType {

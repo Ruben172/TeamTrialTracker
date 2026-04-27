@@ -8,7 +8,7 @@ mod uma;
 use crate::io_helper::move_all_files;
 use io_helper::{read_input_dir, read_scores, save_scores};
 use ocr::{ocr_image, parse_orc_data, setup_engine};
-use plot::{UmaData, create_plots, render_plots};
+use plot::{UmaData, render_plots, render_plots};
 use std::collections::HashMap;
 use uma::read_uma_colours;
 
@@ -50,10 +50,6 @@ fn main() {
     save_scores(&combined_scores);
     move_all_files(&input_paths, PROCESSED_DIR);
 
-    let mut umadata = UmaData::from_scores(&combined_scores);
-    let plots = create_plots(&mut umadata, &uma_colours);
-    println!(
-        "Rendering box plots... do not close the application (or you will have to manually kill geckodriver)"
-    );
-    render_plots(plots);
+    let umadata = UmaData::from_scores(&combined_scores);
+    render_plots(umadata, &uma_colours);
 }
