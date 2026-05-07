@@ -13,6 +13,7 @@ strsim = "0.11.1"
 serde_json_pretty = "0.1.0"
 serde = "1.0.228"
 imageproc = "0.26.1"
+palette = "0.7.6"
 
 # https://github.com/robertknight/ocrs/issues/117
 # The image processing part is also slow on dev profile without optimization.
